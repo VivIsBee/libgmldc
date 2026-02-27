@@ -2,7 +2,10 @@
 
 pub mod cfg;
 
-use std::collections::{HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    ops::Range,
+};
 
 use libgm::{
     gml::{GMCode, Instruction},
@@ -26,7 +29,7 @@ fn get_index_from_bytes(instructions: &[Instruction], byte_index: u32) -> Result
     let mut index = 0;
     let mut offset = 0;
     while offset < byte_index {
-        let instr = instructions.get(index).ok_or_else(|| 
+        let instr = instructions.get(index).ok_or_else(||
             format!("Given byte offset {byte_index} is out of range in instructions with byte length {offset}"
         ))?;
         index += 1;
@@ -65,7 +68,7 @@ fn get_index_from_byte_offset(
     }
 }
 
-fn create_cfg_from_code(code: &GMCode) -> Result<ControlFlowGraph> {
+fn create_instr_cfg_from_code(code: &GMCode) -> Result<ControlFlowGraph> {
     let start_i = get_index_from_bytes(&code.instructions, code.execution_offset())
         .context("decompile_one")?;
     let mut cfg = cfg::ControlFlowGraph::new_rootless();
@@ -115,15 +118,84 @@ fn create_cfg_from_code(code: &GMCode) -> Result<ControlFlowGraph> {
             }
         };
 
-        cfg.push(parent, i);
+        cfg.insert(parent, i);
     }
 
     Ok(cfg)
 }
 
+/// convert a per-instruction CFG into a list of blocks and a block CFG
+fn instr_cfg_to_block_cfg(
+    code: &GMCode,
+    in_cfg: ControlFlowGraph,
+) -> (Vec<Range<usize>>, ControlFlowGraph) {
+    let mut leaders = Vec::new();
+    let mut trailers = Vec::new();
+
+    leaders.push(NodeRef(0));
+
+    for node in in_cfg.iter() {
+        match in_cfg.children_of(node).len() {
+            0 => {
+                trailers.push(node);
+                if *node < in_cfg.len() - 1 {
+                    eprintln!("{node}");
+                    leaders.push(NodeRef(*node + 1));
+                }
+            }
+            1 => {}
+            _ => {
+                trailers.push(node);
+                if *node < in_cfg.len() - 1 {
+                    eprintln!("{node}");
+                    leaders.push(NodeRef(*node + 1));
+                }
+            }
+        }
+
+        if matches!(
+            code.instructions[*node],
+            Instruction::Branch { jump_offset: _ }
+        ) {
+            trailers.push(node);
+            if *node < in_cfg.len() - 1 {
+                eprintln!("{node}");
+                leaders.push(NodeRef(*node + 1));
+            }
+        }
+    }
+
+    let blocks = trailers
+        .into_iter()
+        .zip(leaders.into_iter())
+        .collect::<HashMap<_, _>>();
+
+    let mut out_cfg = ControlFlowGraph::new(NodeRef(0));
+
+    for (i, block) in blocks.iter().enumerate() {
+        let start = *block.1;
+
+        let parents = in_cfg
+            .parents_of(start)
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(); // would be great to remove this allocation but rust gets made about aliasing
+        for parent in parents {
+            out_cfg.insert(blocks[&parent], NodeRef(i));
+        }
+    }
+
+    (
+        blocks.into_iter().map(|v| (*v.1)..(*v.0)).collect(),
+        out_cfg,
+    )
+}
+
 /// Decompile a single code entry.
 pub fn decompile_one(code: &GMCode /* , data: &GMData */) -> Result<String> {
-    let cfg = create_cfg_from_code(code)?;
+    let instr_cfg = create_instr_cfg_from_code(code)?;
+
+    let (blocks, cfg) = instr_cfg_to_block_cfg(code, instr_cfg);
 
     Ok(cfg.to_dot())
 }
