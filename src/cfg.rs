@@ -137,6 +137,14 @@ impl<'a> dot::Labeller<'a, NodeRef, Ed> for ControlFlowGraph {
     fn node_label(&'a self, n: &NodeRef) -> dot::LabelText<'a> {
         dot::LabelText::LabelStr(n.to_string().into())
     }
+
+    fn node_shape(&'a self, node: &NodeRef) -> Option<dot::LabelText<'a>> {
+        match self.children_of(*node).len() {
+            0 => Some(dot::LabelText::LabelStr("box".into())),
+            1 => None,
+            _ => Some(dot::LabelText::LabelStr("diamond".into())),
+        }
+    }
 }
 
 impl<'a> dot::GraphWalk<'a, NodeRef, Ed> for ControlFlowGraph {
