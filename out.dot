@@ -1,0 +1,13 @@
+digraph cfg1 {
+    N2[label="2"];
+    N4[label="4"];
+    N1[label="1"];
+    N0[label="0"];
+    N3[label="3"];
+    N2 -> N3[label=""];
+    N1 -> N0[label=""];
+    N1 -> N2[label=""];
+    N0 -> N1[label=""];
+    N3 -> N4[label=""];
+}
+

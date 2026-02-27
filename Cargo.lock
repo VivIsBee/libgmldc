@@ -63,6 +63,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dot"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a74b6c4d4a1cff5f454164363c16b72fa12463ca6b31f4b5f2035a65fa3d5906"
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -182,7 +188,7 @@ checksum = "2c4a545a15244c7d945065b5d392b2d2d7f21526fba56ce51467b06ed445e8f7"
 [[package]]
 name = "libgm"
 version = "0.4.1"
-source = "git+https://github.com/BioTomateDE/LibGM#7822cd26ff71dd7d652e960dc106872c588ef7f8"
+source = "git+https://github.com/BioTomateDE/LibGM#39a65d1799356279b81d3710a8d7dadf7256027a"
 dependencies = [
  "bzip2",
  "image",
@@ -194,7 +200,7 @@ dependencies = [
 [[package]]
 name = "libgm-macros"
 version = "0.1.2"
-source = "git+https://github.com/BioTomateDE/LibGM#7822cd26ff71dd7d652e960dc106872c588ef7f8"
+source = "git+https://github.com/BioTomateDE/LibGM#39a65d1799356279b81d3710a8d7dadf7256027a"
 dependencies = [
  "quote",
  "syn",
@@ -204,6 +210,7 @@ dependencies = [
 name = "libgmldc"
 version = "0.1.0"
 dependencies = [
+ "dot",
  "fabricator-compiler",
  "libgm",
 ]

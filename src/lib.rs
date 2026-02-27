@@ -96,7 +96,10 @@ fn create_cfg_from_code(code: &GMCode) -> Result<ControlFlowGraph> {
                     ),
                 ));
             }
-            Instruction::BranchIf { jump_offset } | Instruction::BranchUnless { jump_offset } | Instruction::PushWithContext { jump_offset } | Instruction::PopWithContext { jump_offset } => {
+            Instruction::BranchIf { jump_offset }
+            | Instruction::BranchUnless { jump_offset }
+            | Instruction::PushWithContext { jump_offset }
+            | Instruction::PopWithContext { jump_offset } => {
                 i_next.push_back((
                     i,
                     NodeRef(
@@ -105,7 +108,7 @@ fn create_cfg_from_code(code: &GMCode) -> Result<ControlFlowGraph> {
                     ),
                 ));
                 i_next.push_back((i, NodeRef(*i + 1)));
-            },
+            }
             Instruction::Return | Instruction::Exit => {}
             _ => {
                 i_next.push_back((i, NodeRef(*i + 1)));
@@ -122,5 +125,5 @@ fn create_cfg_from_code(code: &GMCode) -> Result<ControlFlowGraph> {
 pub fn decompile_one(code: &GMCode /* , data: &GMData */) -> Result<String> {
     let cfg = create_cfg_from_code(code)?;
 
-    Ok(format!("{cfg:#?}"))
+    Ok(cfg.to_dot())
 }
