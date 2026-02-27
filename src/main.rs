@@ -2,16 +2,16 @@
 
 use std::error::Error;
 
-use libgm::gml::{GMCode, Instruction};
+use libgm::gml::{GMCode, Instruction, instruction::PushValue};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let code = GMCode {
         name: "code1".to_string(),
         instructions: vec![
-            Instruction::Exit,
+            Instruction::Push { value: PushValue::Boolean(false) },
             Instruction::BranchIf { jump_offset: -1 },
-            Instruction::Exit,
-            Instruction::Exit,
+            Instruction::Push { value: PushValue::Boolean(true) },
+            Instruction::Push { value: PushValue::Boolean(false) },
             Instruction::Exit,
         ],
         modern_data: None,
