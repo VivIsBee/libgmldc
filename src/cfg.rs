@@ -3,7 +3,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::{Debug, Display},
     ops::{Deref, DerefMut},
 };
 
@@ -13,7 +13,7 @@ pub struct NodeRef(pub usize);
 
 impl Display for NodeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        Display::fmt(&self.0, f)
     }
 }
 
@@ -33,28 +33,29 @@ impl DerefMut for NodeRef {
 
 /// A single node in a [`ControlFlowGraph`].
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ControlFlowNode {
+pub struct ControlFlowNode<Meta: Clone + Debug> {
     /// The associated data.
     pub data: NodeRef,
     /// The children of this node.
     pub children: HashSet<NodeRef>,
     /// The parents of this node.
     pub parents: HashSet<NodeRef>,
+    /// Metadata for this node.
+    pub meta: Meta,
 }
 
 /// A control flow graph.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ControlFlowGraph {
-    nodes: HashMap<NodeRef, ControlFlowNode>,
-    set: HashSet<NodeRef>,
+pub struct ControlFlowGraph<Meta: Clone + Debug> {
+    nodes: HashMap<NodeRef, ControlFlowNode<Meta>>,
     root: Option<NodeRef>,
 }
 
-impl ControlFlowGraph {
+impl<Meta: Clone + Debug> ControlFlowGraph<Meta> {
     /// Create a new control flow graph. The root is index 0.
-    pub fn new(root: NodeRef) -> Self {
+    pub fn new(root: NodeRef, root_meta: Meta) -> Self {
         let mut new = Self::new_rootless();
-        new.insert(NodeRef(0), root);
+        new.insert(NodeRef(0), root, root_meta);
         new
     }
     /// Create a new empty CFG. The root will be whatever is pushed first with a
@@ -62,17 +63,11 @@ impl ControlFlowGraph {
     pub fn new_rootless() -> Self {
         Self {
             nodes: HashMap::new(),
-            set: HashSet::new(),
             root: None,
         }
     }
-    /// Push a new node to the control flow graph with the provided parent.
-    ///
-    /// # Panics
-    ///
-    /// If the provided parent doesn't exist in this graph, panics. An exception
-    /// is if this CFG is empty.
-    pub fn insert(&mut self, parent: NodeRef, this: NodeRef) {
+    /// Insert a node without a parent.
+    pub fn insert_parentless(&mut self, this: NodeRef, meta: Meta) {
         if self.nodes.is_empty() {
             eprintln!("_ -> {this}");
             self.nodes.insert(
@@ -81,29 +76,70 @@ impl ControlFlowGraph {
                     data: this,
                     children: HashSet::new(),
                     parents: HashSet::new(),
+                    meta,
                 },
             );
-            self.set.insert(this);
+            self.root = Some(this);
+            return;
+        }
+        eprintln!("_ -> {this}");
+        match self.nodes.entry(this) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().meta = meta;
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(ControlFlowNode {
+                    data: this,
+                    children: HashSet::new(),
+                    parents: HashSet::new(),
+                    meta,
+                });
+            }
+        }
+    }
+    /// Push a new node to the control flow graph with the provided parent.
+    pub fn insert(&mut self, parent: NodeRef, this: NodeRef, meta: Meta) {
+        if self.nodes.is_empty() {
+            eprintln!("_ -> {this}");
+            self.nodes.insert(
+                this,
+                ControlFlowNode {
+                    data: this,
+                    children: HashSet::new(),
+                    parents: HashSet::new(),
+                    meta,
+                },
+            );
             self.root = Some(this);
             return;
         }
         eprintln!("{parent} -> {this}");
-        assert!(*parent < self.nodes.len());
         match self.nodes.entry(this) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
                 entry.get_mut().parents.insert(parent);
+                entry.get_mut().meta = meta;
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 entry.insert(ControlFlowNode {
                     data: this,
                     children: HashSet::new(),
                     parents: [parent].into(),
+                    meta,
                 });
             }
         }
 
         self.nodes.get_mut(&parent).unwrap().children.insert(this);
-        self.set.insert(this);
+    }
+    /// Remove the provided item from the CFG.
+    pub fn remove(&mut self, this: NodeRef) {
+        let node = self.nodes.remove(&this).unwrap();
+        for child in node.children {
+            self.nodes.get_mut(&child).unwrap().parents.remove(&this);
+        }
+        for parent in node.parents {
+            self.nodes.get_mut(&parent).unwrap().children.remove(&this);
+        }
     }
     /// Get the children of a node.
     pub fn children_of(&self, node: NodeRef) -> &HashSet<NodeRef> {
@@ -113,9 +149,13 @@ impl ControlFlowGraph {
     pub fn parents_of(&self, node: NodeRef) -> &HashSet<NodeRef> {
         &self.nodes[&node].parents
     }
+    /// Get the meta of a node.
+    pub fn meta_of(&self, node: NodeRef) -> &Meta {
+        &self.nodes[&node].meta
+    }
     /// Whether this CFG contains the provided data item.
     pub fn has(&self, data: NodeRef) -> bool {
-        self.set.contains(&data)
+        self.nodes.contains_key(&data)
     }
     /// Convert this CFG into a .dot graphviz file.
     pub fn to_dot(&self) -> String {
@@ -128,18 +168,18 @@ impl ControlFlowGraph {
     /// Get an iterator over the items in an arbitrary order.
     pub fn iter(&self) -> impl Iterator<Item = NodeRef> {
         ControlFlowGraphIter {
-            hash_set_iter: self.set.iter(),
+            keys: self.nodes.keys(),
         }
     }
     /// Get the number of nodes in this graph.
     pub fn len(&self) -> usize {
-        self.set.len()
+        self.nodes.len()
     }
 }
 
 type Ed = (NodeRef, NodeRef);
 
-impl<'a> dot::Labeller<'a, NodeRef, Ed> for ControlFlowGraph {
+impl<'a, Meta: Clone + Debug> dot::Labeller<'a, NodeRef, Ed> for ControlFlowGraph<Meta> {
     fn graph_id(&'a self) -> dot::Id<'a> {
         dot::Id::new("cfg1").unwrap()
     }
@@ -161,7 +201,7 @@ impl<'a> dot::Labeller<'a, NodeRef, Ed> for ControlFlowGraph {
     }
 }
 
-impl<'a> dot::GraphWalk<'a, NodeRef, Ed> for ControlFlowGraph {
+impl<'a, Meta: Clone + Debug> dot::GraphWalk<'a, NodeRef, Ed> for ControlFlowGraph<Meta> {
     fn nodes(&self) -> dot::Nodes<'a, NodeRef> {
         Cow::Owned(self.nodes.values().map(|v| v.data).collect::<Vec<_>>())
     }
@@ -184,14 +224,14 @@ impl<'a> dot::GraphWalk<'a, NodeRef, Ed> for ControlFlowGraph {
     }
 }
 
-struct ControlFlowGraphIter<'a> {
-    hash_set_iter: std::collections::hash_set::Iter<'a, NodeRef>,
+struct ControlFlowGraphIter<'a, Meta: Clone + Debug> {
+    keys: std::collections::hash_map::Keys<'a, NodeRef, ControlFlowNode<Meta>>,
 }
 
-impl<'a> Iterator for ControlFlowGraphIter<'a> {
+impl<'a, Meta: Clone + Debug> Iterator for ControlFlowGraphIter<'a, Meta> {
     type Item = NodeRef;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.hash_set_iter.next().copied()
+        self.keys.next().copied()
     }
 }

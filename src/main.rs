@@ -2,9 +2,12 @@
 
 use std::error::Error;
 
-use libgm::gml::{
-    GMCode, Instruction,
-    instruction::{DataType, PushValue},
+use libgm::{
+    gml::{
+        GMCode, Instruction,
+        instruction::{DataType, PushValue},
+    },
+    prelude::GMData,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -16,10 +19,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             },
             Instruction::BranchIf { jump_offset: -2 },
             Instruction::Push {
-                value: PushValue::Boolean(true),
+                value: PushValue::Int64(256),
+            },
+            Instruction::Push {
+                value: PushValue::Int64(256),
+            },
+            Instruction::Add {
+                augend: DataType::Int64,
+                addend: DataType::Int64,
             },
             Instruction::Convert {
-                from: DataType::Boolean,
+                from: DataType::Int64,
                 to: DataType::Variable,
             },
             Instruction::Return,
@@ -27,6 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         modern_data: None,
     };
 
-    println!("{}", libgmldc::decompile_one(&code)?);
+    let data = GMData {
+        ..Default::default()
+    };
+
+    println!("{}", libgmldc::decompile_one(&code, &data)?);
     Ok(())
 }
